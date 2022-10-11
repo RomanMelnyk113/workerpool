@@ -15,8 +15,9 @@ import (
 )
 
 func main() {
-	workersCount := flag.Int("workersCount", 10, "workers pool size")
-	tasksLimit := flag.Int("tasksLimit", 30, "tasks per worker")
+	workersCount := flag.Int("workers", 10, "workers pool size")
+	tasksLimit := flag.Int("tasks", 30, "max allowed tasks number to be executed")
+	flag.Parse()
 
 	log := logrus.New()
 
@@ -33,6 +34,7 @@ func run(log logrus.FieldLogger, size, limit int) error {
 	defer cancel()
 	totalStats := &querier.TotalStats{}
 
+	log.Infof("start pool with %d and tasks limit %d\n", size, limit)
 	wp := workerpool.NewPool(ctx, log, size)
 	urlChan := make(chan string)
 

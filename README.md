@@ -13,5 +13,5 @@ go build -o workerpool ./cmd/workerpool/main.go
 
 then run
 ``` sh 
-./workerpool -size=5 -tasks-limit=100
+./workerpool -workers=5 -tasks=100
 ```

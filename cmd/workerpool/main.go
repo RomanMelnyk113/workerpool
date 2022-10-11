@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -36,6 +35,7 @@ func run(log logrus.FieldLogger, size, limit int) error {
 
 	log.Infof("start pool with %d and tasks limit %d\n", size, limit)
 	wp := workerpool.NewPool(ctx, log, size)
+	wp.Run()
 	urlChan := make(chan string)
 
 	// simulate streaming by reading the TOP 1m sites list by chunks
@@ -66,7 +66,8 @@ func run(log logrus.FieldLogger, size, limit int) error {
 	select {
 	case <-wp.Stopped:
 		log.Info("workerpool stopped, printing summary")
-		printSummary(totalStats)
+		totalStats.PrintSummary()
+		cancel()
 	case <-signals:
 		log.Info("interrupt signal received, initiating workerpool shutdown")
 		cancel()
@@ -75,13 +76,4 @@ func run(log logrus.FieldLogger, size, limit int) error {
 	}
 
 	return nil
-}
-
-func printSummary(stats *querier.TotalStats) {
-	fmt.Println("==================================")
-	fmt.Printf(
-		"Total tasks: %d\nSuccess: %d\nFailure: %d\nAverage body size: %v bytes\nAverage response time: %v\n",
-		stats.Total, stats.Succeed, stats.Failed, stats.AvgResponseSize, stats.AvgResponseTime,
-	)
-	fmt.Println("==================================")
 }

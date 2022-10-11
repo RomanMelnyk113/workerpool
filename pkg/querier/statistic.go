@@ -1,6 +1,7 @@
 package querier
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -39,4 +40,18 @@ func (s *TotalStats) UpdateStats(stats *Stats) {
 	} else {
 		s.AvgResponseSize = stats.responseSize
 	}
+}
+
+func (s *TotalStats) PrintSummary() {
+	fmt.Println("==================================")
+	fmt.Printf(
+		`Total tasks: %d
+		Success: %d
+		Failure: %d
+		Average body size: %v bytes
+		Average response time: %v
+		`,
+		s.Total, s.Succeed, s.Failed, s.AvgResponseSize, s.AvgResponseTime,
+	)
+	fmt.Println("==================================")
 }

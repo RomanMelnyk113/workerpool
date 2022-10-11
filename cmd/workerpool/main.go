@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,43 +15,60 @@ import (
 )
 
 func main() {
-	size := flag.Int("size", 100, "workers pool size")
+	workersCount := flag.Int("workersCount", 10, "workers pool size")
+	tasksLimit := flag.Int("tasksLimit", 10, "tasks per worker")
 
 	log := logrus.New()
 
-	if err := run(log, *size); err != nil {
+	if err := run(log, *workersCount, *tasksLimit); err != nil {
 		log.Fatalf("workerpool exited with error: %v", err)
 	}
 
 	log.Info("workerpool shutdown")
 }
 
-func run(log logrus.FieldLogger, size int) error {
+// run will start listening for new incoming tasks to be executed by workers
+func run(log logrus.FieldLogger, size, limit int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	totalStats := &querier.TotalStats{}
 
 	wp := workerpool.NewPool(ctx, log, size)
 	urlChan := make(chan string)
-	go reader.GetTestFileByChunks(urlChan)
 
+	// simulate streaming by reading the TOP 1m sites list by chunks
+	go reader.ProcessTestFile(ctx, log, urlChan)
+
+	// process received urls and send tasks to the worker pool
 	go func() {
+		i := 0
+		log.Info(limit)
 		for url := range urlChan {
+			log.Info(i)
+			if i > limit {
+				log.Info("reached limit, stop tasks processing")
+				break
+			}
 			url := url
 			wp.Execute(func() error {
-				return querier.GetAndPrintPage(url)
+				stats, err := querier.GetAndPrintPage(ctx, log, url)
+				totalStats.UpdateStats(stats)
+				return err
 			})
+			i++
 		}
+		wp.Stop()
 	}()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 
 	select {
-	//case url := <-urlChan:
-	//log.Info("hanle URL", url)
-	//wp.Execute(func() error {
-	//return querier.GetAndPrintPage(url)
-	//})
+	case finished := <-wp.Stopped:
+		if finished {
+			log.Info("workerpool stopped, printing summary")
+			printSummary(totalStats)
+		}
 	case <-signals:
 		log.Info("interrupt signal received, initiating workerpool shutdown")
 		cancel()
@@ -59,4 +77,13 @@ func run(log logrus.FieldLogger, size int) error {
 	}
 
 	return nil
+}
+
+func printSummary(stats *querier.TotalStats) {
+	fmt.Println("==================================")
+	fmt.Printf(
+		"Total tasks: %d\nSuccess: %d\nFailure: %d\nAverage body size: %v\nAverage response time: %v\n",
+		stats.Total, stats.Succeed, stats.Failed, stats.AvgResponseSize, stats.AvgResponseTime,
+	)
+	fmt.Println("==================================")
 }

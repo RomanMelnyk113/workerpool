@@ -1,26 +1,32 @@
 package querier
 
 import (
+	"context"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
-func GetAndPrintPage(url string) error {
+type Stats struct {
+	responseTime time.Duration
+	responseSize int
+}
+
+func GetAndPrintPage(ctx context.Context, log logrus.FieldLogger, url string) (*Stats, error) {
 	url = "https://" + url
 	start := time.Now()
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	elapsed := time.Since(start)
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = string(body)
 	log.Printf("%s processed in %v, body size %v\n", url, elapsed, len(body))
-	//log.Printf(sb)
-	return nil
+	stats := &Stats{responseTime: elapsed, responseSize: len(body)}
+	return stats, nil
 }

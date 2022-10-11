@@ -4,30 +4,29 @@ import (
 	"bytes"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
-func TestProcessTestFile(t *testing.T) {
-	log := logrus.New()
-
+func TestReadCSVByLines(t *testing.T) {
 	r := require.New(t)
 
 	t.Run("succesfully read csv by lines", func(t *testing.T) {
-		chunkSize := 1
-		var mu sync.Mutex
+		urlChan := make(chan string, 4)
+		csv := bytes.NewBufferString("1,one\n2,two\n3,three\n4,four\n")
 		counter := 0
-		fn := func(data []string) {
-			mu.Lock()
-			defer mu.Unlock()
-			log.Infof("processsing: %v", data)
-			counter++
-		}
-		csv := bytes.NewBufferString("1,one\n2,two\n3,three\n4,four")
-		ReadCSVByLines(chunkSize, csv, fn)
-
+		var mu sync.Mutex
+		go func() {
+			for range urlChan {
+				mu.Lock()
+				defer mu.Unlock()
+				counter++
+			}
+		}()
+		ReadCSVByLines(csv, urlChan, 10)
+		time.Sleep(2 * time.Second)
 		// make sure we processed same number of lines as we have settled up above in testing string
-		r.Equal(counter, 4)
+		r.Equal(4, counter)
 	})
 }

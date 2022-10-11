@@ -17,6 +17,8 @@ type pool struct {
 
 	taskQueue   chan Task
 	workerQueue chan Task
+
+	Stopped chan bool
 }
 
 func NewPool(ctx context.Context, log logrus.FieldLogger, size int) *pool {
@@ -35,6 +37,7 @@ func NewPool(ctx context.Context, log logrus.FieldLogger, size int) *pool {
 
 // Stop finishes accepting new tasks by closing the tasks channel
 func (p *pool) Stop() {
+	p.Stopped <- true
 	close(p.taskQueue)
 }
 
@@ -49,14 +52,15 @@ func (p *pool) Execute(task Task) {
 func (p *pool) worker(id int) {
 	p.log.Println("Spawn worker", id)
 	for task := range p.workerQueue {
+		// process tasks if we didn't reach max allowed amount or concurent tasks allowed
 		p.wg.Add(1)
-		//p.log.Println("worker", id, "processing job")
-		if err := task(); err != nil {
-			// TODO: add failed tasks to the queue to rerun them???
-
-			defer p.wg.Done()
-			p.log.Warnf("task error: %w", err)
-		}
+		go func(f func() error) {
+			if err := f(); err != nil {
+				// TODO: add failed tasks to the queue to rerun them???
+				defer p.wg.Done()
+				p.log.Warnf("task failed: %v", err)
+			}
+		}(task)
 	}
 }
 
@@ -84,8 +88,7 @@ func (p *pool) dispatch(ctx context.Context) {
 				//p.log.Info("push task to workers")
 			}
 		case <-ctx.Done():
-			p.wg.Wait() // wait for all tasks to be finished
-			return
+			break
 		}
 	}
 }

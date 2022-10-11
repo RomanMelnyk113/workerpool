@@ -3,13 +3,15 @@ package reader
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"io/ioutil"
-	"log"
 	"net/http"
+
+	"github.com/sirupsen/logrus"
 )
 
 // GetTestFileByChunks downloading testing file and read all files from zip
-func GetTestFileByChunks(processingChan chan<- string) error {
+func ProcessTestFile(ctx context.Context, log logrus.FieldLogger, processingChan chan<- string) error {
 	fileUrl := "https://s3.amazonaws.com/alexa-static/top-1m.csv.zip"
 	log.Printf("downloading file %v\n", fileUrl)
 	resp, err := http.Get(fileUrl)
@@ -31,7 +33,7 @@ func GetTestFileByChunks(processingChan chan<- string) error {
 	// Read all the files from zip archive
 	for _, zipFile := range zipReader.File {
 		log.Println("reading file:", zipFile.Name)
-		err := readZipFile(processingChan, zipFile)
+		err := readZipFile(ctx, log, processingChan, zipFile)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -40,12 +42,12 @@ func GetTestFileByChunks(processingChan chan<- string) error {
 	return nil
 }
 
-func readZipFile(processingChan chan<- string, zf *zip.File) error {
+func readZipFile(ctx context.Context, log logrus.FieldLogger, processingChan chan<- string, zf *zip.File) error {
 	f, err := zf.Open()
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return ReadCSVByLines(f, processingChan)
+	return ReadCSVByLines(ctx, log, f, processingChan)
 
 }

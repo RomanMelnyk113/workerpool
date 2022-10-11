@@ -1,22 +1,17 @@
 package reader
 
 import (
-	"bufio"
+	"context"
 	"encoding/csv"
 	"io"
-	"log"
-	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
-func ReadCSVByLines(file io.Reader, urlChan chan<- string, limit int) error {
+func ReadCSVByLines(ctx context.Context, log logrus.FieldLogger, file io.Reader, urlChan chan<- string) error {
 	// read csv values using csv.Reader
 	csvReader := csv.NewReader(file)
-	i := 0
 	for {
-		if limit > 0 && i > limit {
-			break
-		}
-		i++
 		rec, err := csvReader.Read()
 		if err == io.EOF {
 			break
@@ -26,38 +21,14 @@ func ReadCSVByLines(file io.Reader, urlChan chan<- string, limit int) error {
 		}
 		// 1st value is the row number so we can read directly 2nd value
 		urlChan <- rec[1]
-	}
-	return nil
-}
 
-func rawReadFileByChunk(file io.Reader, fn func(string)) error {
-	var wg sync.WaitGroup
-	r := bufio.NewReader(file)
-	for {
-		buf := make([]byte, 4*1024) //the chunk size
-		n, err := r.Read(buf)       //loading chunk into buffer
-		buf = buf[:n]
-		if n == 0 {
-			if err != nil {
-				log.Println(err)
-				break
-			}
-			if err == io.EOF {
-				break
-			}
-			return err
+		// Check if the context is expired.
+		select {
+		default:
+		case <-ctx.Done():
+			log.Info("stop file parsing")
+			return ctx.Err()
 		}
-		nextUntillNewline, err := r.ReadBytes('\n')
-		if err != io.EOF {
-			buf = append(buf, nextUntillNewline...)
-		}
-		wg.Add(1)
-		go func() {
-			fn(string(buf))
-			wg.Done()
-		}()
-		break
 	}
-	wg.Wait()
 	return nil
 }

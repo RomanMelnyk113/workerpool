@@ -26,4 +26,7 @@ func TestWorkerPool(t *testing.T) {
 		// it will fail here in case if number of executed taks is not equal to expected number
 		wg.Wait()
 	})
+
+	// TODO: add more test cases
+
 }

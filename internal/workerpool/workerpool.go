@@ -18,7 +18,7 @@ type pool struct {
 	taskQueue   chan Task
 	workerQueue chan Task
 
-	Stopped chan bool
+	Stopped chan struct{}
 }
 
 func NewPool(ctx context.Context, log logrus.FieldLogger, size int) *pool {
@@ -27,6 +27,7 @@ func NewPool(ctx context.Context, log logrus.FieldLogger, size int) *pool {
 		size:        size,
 		taskQueue:   make(chan Task),
 		workerQueue: make(chan Task),
+		Stopped:     make(chan struct{}),
 	}
 
 	p.initWorkers()
@@ -37,7 +38,6 @@ func NewPool(ctx context.Context, log logrus.FieldLogger, size int) *pool {
 
 // Stop finishes accepting new tasks by closing the tasks channel
 func (p *pool) Stop() {
-	p.Stopped <- true
 	close(p.taskQueue)
 }
 
@@ -50,37 +50,38 @@ func (p *pool) Execute(task Task) {
 
 // worker initializing processing queue with tasks
 func (p *pool) worker(id int) {
-	p.log.Println("Spawn worker", id)
-	for task := range p.workerQueue {
-		// process tasks if we didn't reach max allowed amount or concurent tasks allowed
-		p.wg.Add(1)
-		go func(f func() error) {
-			if err := f(); err != nil {
-				// TODO: add failed tasks to the queue to rerun them???
-				defer p.wg.Done()
-				p.log.Warnf("task failed: %v", err)
-			}
-		}(task)
+	p.log.Debugf("spawn worker %d", id)
+	defer p.wg.Done()
+	for {
+		task, more := <-p.workerQueue
+		if !more {
+			p.log.Debugf("kill worker %d", id)
+			break
+		}
+		if err := task(); err != nil {
+			// TODO: add failed tasks to the queue to rerun them???
+			p.log.Warnf("task failed: %v", err)
+		}
 	}
 }
 
 // dispatch starts all workers
 func (p *pool) initWorkers() {
-	p.log.Info("starting workers")
 	for i := 0; i < p.size; i++ {
-		go p.worker(i)
+		idx := i
+		p.wg.Add(1)
+		go p.worker(idx)
 	}
 }
 
 // dispatch keep processing the tasks and send to the workers queue
 func (p *pool) dispatch(ctx context.Context) {
+Loop:
 	for {
 		select {
 		case task, more := <-p.taskQueue:
 			if !more {
-				p.log.Info("cancel tasks processing")
-				p.wg.Wait() // wait for all tasks to be finished
-				break
+				break Loop
 			}
 			// Got a task to do.
 			select {
@@ -88,7 +89,11 @@ func (p *pool) dispatch(ctx context.Context) {
 				//p.log.Info("push task to workers")
 			}
 		case <-ctx.Done():
-			break
+			break Loop
 		}
 	}
+	// close workers queue and wait for all tasks
+	close(p.workerQueue)
+	p.wg.Wait()
+	close(p.Stopped)
 }

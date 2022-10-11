@@ -28,7 +28,15 @@ func (s *TotalStats) UpdateStats(stats *Stats) {
 	}
 
 	s.Succeed++
-	s.AvgResponseSize = (s.AvgResponseSize + stats.responseSize) / s.Total
-	avgTime := (s.AvgResponseTime.Milliseconds() + stats.responseTime.Milliseconds()) / int64(s.Total)
-	s.AvgResponseTime = time.Duration(avgTime)
+	if s.AvgResponseTime.Milliseconds() != 0 {
+		avgTime := (s.AvgResponseTime.Milliseconds() + stats.responseTime.Milliseconds()) / int64(2)
+		s.AvgResponseTime = time.Duration(avgTime) * time.Millisecond
+	} else {
+		s.AvgResponseTime = stats.responseTime
+	}
+	if s.AvgResponseTime != 0 {
+		s.AvgResponseSize = (s.AvgResponseSize + stats.responseSize) / s.Total
+	} else {
+		s.AvgResponseSize = stats.responseSize
+	}
 }

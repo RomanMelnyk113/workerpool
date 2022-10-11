@@ -16,7 +16,7 @@ import (
 
 func main() {
 	workersCount := flag.Int("workersCount", 10, "workers pool size")
-	tasksLimit := flag.Int("tasksLimit", 10, "tasks per worker")
+	tasksLimit := flag.Int("tasksLimit", 30, "tasks per worker")
 
 	log := logrus.New()
 
@@ -42,11 +42,9 @@ func run(log logrus.FieldLogger, size, limit int) error {
 	// process received urls and send tasks to the worker pool
 	go func() {
 		i := 0
-		log.Info(limit)
 		for url := range urlChan {
-			log.Info(i)
-			if i > limit {
-				log.Info("reached limit, stop tasks processing")
+			if i >= limit {
+				log.Info("reached limit, stopping tasks processing")
 				break
 			}
 			url := url
@@ -64,11 +62,9 @@ func run(log logrus.FieldLogger, size, limit int) error {
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 
 	select {
-	case finished := <-wp.Stopped:
-		if finished {
-			log.Info("workerpool stopped, printing summary")
-			printSummary(totalStats)
-		}
+	case <-wp.Stopped:
+		log.Info("workerpool stopped, printing summary")
+		printSummary(totalStats)
 	case <-signals:
 		log.Info("interrupt signal received, initiating workerpool shutdown")
 		cancel()
@@ -82,7 +78,7 @@ func run(log logrus.FieldLogger, size, limit int) error {
 func printSummary(stats *querier.TotalStats) {
 	fmt.Println("==================================")
 	fmt.Printf(
-		"Total tasks: %d\nSuccess: %d\nFailure: %d\nAverage body size: %v\nAverage response time: %v\n",
+		"Total tasks: %d\nSuccess: %d\nFailure: %d\nAverage body size: %v bytes\nAverage response time: %v\n",
 		stats.Total, stats.Succeed, stats.Failed, stats.AvgResponseSize, stats.AvgResponseTime,
 	)
 	fmt.Println("==================================")

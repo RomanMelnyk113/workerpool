@@ -16,6 +16,7 @@ type Stats struct {
 
 func GetAndPrintPage(ctx context.Context, log logrus.FieldLogger, url string) (*Stats, error) {
 	url = "https://" + url
+	log.Infof("proccessing %v\n", url)
 	start := time.Now()
 	resp, err := http.Get(url)
 	if err != nil {
@@ -26,7 +27,7 @@ func GetAndPrintPage(ctx context.Context, log logrus.FieldLogger, url string) (*
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%s processed in %v, body size %v\n", url, elapsed, len(body))
+	log.Debugf("%s finished in %v, body size %v\n", url, elapsed, len(body))
 	stats := &Stats{responseTime: elapsed, responseSize: len(body)}
 	return stats, nil
 }
